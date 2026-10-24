@@ -70,8 +70,27 @@ Control strictly transitions down the ladder: **Tier 1 $\rightarrow$ Tier 2 $\ri
 
 ---
 
-## Known Limitations & Design Scope
-* **Reference Architecture:** This project demonstrates a functional safety methodology; it does not claim formal IEC 61508 / ISO 13849 certification.
-* **Shared Silicon Boundaries:** Tiers 2 and 3 reside on the same MPFS250T die, sharing common silicon power rails and master clock sources.
-* **In-Boundary Semantic Errors:** The hardware gate traps kinematic boundary breaches and stale commands; it cannot determine whether an in-boundary trajectory command is globally optimal.
-* **Power Blackout:** Complete loss of main battery power requires downstream fail-safe spring brakes or capacitive energy storage for orderly shutdown.
+## Comparison with Existing Approaches: How We Differ
+
+Standard robotics platforms rely on software watchdogs, external safety microcontrollers, or heavy software hypervisors. The table below outlines how CrashProof Control differs fundamentally in silicon architecture, failure tolerance, and reaction latency[cite: 1]:
+
+| Metric / Capability | Conventional ROS 2 / Linux Stack | External Safety MCU (e.g., micro-ROS / STM32) | Type-1 Embedded Hypervisor (e.g., Xen / QNX) | **CrashProof Control (PolarFire SoC)** |
+| :--- | :--- | :--- | :--- | :--- |
+| **Silicon Architecture** | Single-domain CPU (All tasks share OS & memory) | Dual-board topology (Host Linux SBC + external MCU via UART/SPI) | Single multicore SoC with virtualized guest OS partitions | **Heterogeneous single-chip SoC: Hard RISC-V AMP + Hardware FPGA Interposer**[cite: 1] |
+| **Actuator Authority** | Software registers written directly by OS drivers | MCU firmware timer peripherals (vulnerable to MCU code lockups) | Hypervisor software scheduling and virtual device drivers | **Pure FPGA logic gates (Zero-Trust Hardware MUX has final arbitration)** |
+| **Command Validation Depth** | None (Executes whatever memory contains) | Basic checksums in software; no cycle-by-cycle kinematic boundary enforcement | Software boundary checks subject to CPU preemption and scheduling delays | **Inline hardware verification: monotonic sequence counters, rolling tokens, CRC, and physical slew-rate clamping ($d(\text{PWM})/dt$)** |
+| **Response to "Zombie" / Stale Telemetry** | Continues repeating frozen setpoint until crash or physical collision | Stalls while waiting on host-side XRCE-DDS agent timeout loops | Requires software timeout handlers in guest VM | **Dual hardware down-counters drop control authority to degraded reflex mode within $\le 20\text{ ms}$** |
+| **Sensor Preservation During OS Crash** | Total sensor starvation until full OS and driver reboot (tens of seconds) | Sensor data buffered on MCU; cannot easily share high-bandwidth telemetry with Linux | Shared I/O virtualized through hypervisor; subject to virtualization overhead | **Hardware-timestamped dual ingest: E51 receives low-latency raw samples continuously; Linux re-links via DMA on reboot** |
+| **Failsafe Transition Latency** | Unbounded / Non-existent (Requires manual E-stop slap) | $1\text{ ms} - 10\text{ ms}$ (software interrupt $\rightarrow$ context switch) | Hundreds of microseconds (CPU context-switch dependency) | **$<10\text{ }\mu\text{s}$ (Autonomous RTL FSM switches PWM mux directly)** |
+| **Behavior Under Total Software Hang** | Undefined; outputs latch last commanded duty cycle | Internal watchdog triggers full chip reboot (50–500 ms floating-pin blackout) | System-wide kernel panic / hard lockup | **Hardware Safe-State: Clamps to pre-wired fail-passive dynamic braking or engages spring-applied mechanical brakes**[cite: 1] |
+
+### Key Architectural Differentiators
+
+1. **Hardware-Enforced Actuator Interposition (Not Software Watchdogs):**
+   Conventional watchdogs only check binary *liveness* ("is the CPU executing instructions?"), not *sanity*. CrashProof Control uses FPGA fabric logic to validate the *contents* of every command packet. Even if Linux is fully functional, an out-of-bounds velocity spike or runaway acceleration curve is clamped by hardware gates before reaching physical motor drivers.
+
+2. **No Dependency on Host Agents (Eliminating the micro-ROS Vulnerability):**
+   Auxiliary microcontroller designs rely on a host-side communication daemon (e.g., XRCE-DDS agent). When the host OS kernel panics, the client on the microcontroller spends critical milliseconds handling communication drops and re-negotiations. In CrashProof Control, the real-time core (E51) runs bare-metal against physical hardware FIFOs, completely insulated from the Linux networking stack.
+
+3. **Fail-Operational Degraded Reflexes (Beyond the "Dumb Killswitch"):**
+   Cutting power via an E-stop causes moving industrial rovers to skid and robotic arms to drop under gravity. CrashProof Control provides staged degradation: it preserves inertial feedback and motor control to execute an active, controlled S-curve deceleration or dynamic balance hold during high-level computing outages[cite: 1].
