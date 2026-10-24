@@ -6,14 +6,14 @@
 ## System Architecture
 
 ### Conceptual Fallback Hierarchy
-![CrashProof Control 3-Tier Overview](architecture_tier_overview.png)
+<img src="CrashProof Control 3-Tier Overview.png" alt="CrashProof Control 3-Tier Overview" width="100%"/>
+
 *Figure 1: Hierarchical runtime assurance ladder showing staged demotion from Tier 1 (Primary Computer) to Tier 2 (Secondary Linux) down to Tier 3 (FPGA Safety FSM).*
 
 ### Silicon Implementation & Interconnect Pipeline
-![CrashProof Control Detailed Architecture](system_detailed_pipeline.png)
-*Figure 2: Microchip PolarFire® SoC interconnect topology showing timestamp ingestion, Ethernet routing, dual liveness monitors, and inline hardware PWM multiplexing.*
+<img src="CrashProof Control Detailed Architecture.png" alt="CrashProof Control Detailed Architecture" width="100%"/>
 
----
+*Figure 2: Microchip PolarFire® SoC interconnect topology showing timestamp ingestion, Ethernet routing, dual liveness monitors, and inline hardware PWM multiplexing.*
 
 ## Problem Statement
 Robots operating in remote or extreme environments where manual reboots are impossible require general-purpose Linux and ROS 2 compute for perception and planning. These systems routinely suffer two distinct failure modes:
